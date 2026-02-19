@@ -43,7 +43,7 @@
   - [ ] Task 7.1: Implementar pantalla de Login y protección de rutas. 
   - [ ] Task 7.2: Maquetar tabla para listar Benches y Sitios consumiendo la API. 
 - [ ] **Task 8: Orquestación de Creación de Sitios**
-  - **Prioridad:** Alta |  **Asignado a:** [Backend y DevOps] 
+  - **Prioridad:** Alta |  **Asignado a:** 
   - [ ] Task 8.1: Crear endpoint POST que reciba el dominio y apps seleccionadas. 
   - [ ] Task 8.2: Diseñar el K8s Job (contenedor desechable) que ejecuta `bench new-site`. 
 - [ ] **Task 9: Formularios de Creación (Frontend)**
@@ -57,10 +57,10 @@
 *Objetivo: Pulir telemetría, testear tolerancia a fallos y preparar la entrega final.*
 
 - [ ] **Task 10: Telemetría y UI en Tiempo Real**
-  - **Prioridad:** Media |  **Asignado a:** [Backend y Frontend] 
+  - **Prioridad:** Media |  **Asignado a:**  
   - [ ] Task 10.1: Endpoint para obtener el estado real de un Pod (Pending, Running, Failed). 
   - [ ] Task 10.2: Mostrar *badges* de estado en la UI del dashboard. 
 - [ ] **Task 11: Pruebas de Resiliencia y Entrega**
-  - **Prioridad:** Alta |  **Asignado a:** Todos 
+  - **Prioridad:** Alta |  **Asignado a:**  
   - [ ] Task 11.1: Simular caída de nodos/pods y documentar auto-sanación (*self-healing*). 
   - [ ] Task 11.2: Revisión final de código y limpieza del repositorio. 
