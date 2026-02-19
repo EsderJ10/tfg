@@ -31,7 +31,7 @@
   - **Prioridad:** Alta |  **Asignado a:**  
   - [ ] Task 6.1: Desarrollar endpoints de Login/Registro (JWT). 
   - [ ] Task 6.2: Integrar librería `kubernetes-client` en FastAPI. 
-  - [ ] Task 6.3: Endpoint para listar *namespaces* y *pods* de un bench (`kubectl get pods -n <namespace>`). 
+  - [ ] Task 6.3: Endpoint para listar *namespaces* y *pods* de un bench. 
 
 ---
 
