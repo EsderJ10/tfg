@@ -13,7 +13,7 @@ Para configurar el entorno de desarrollo, sigue los siguientes pasos:
 
 Con ello, se creará un entorno de desarrollo consistente y fácil de usar.
 
-> [!NOTA]
+> [!NOTE]
 > La primera vez que se ejecute, tardará unos minutos.
 
 ## TODO
