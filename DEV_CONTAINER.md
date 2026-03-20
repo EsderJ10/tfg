@@ -1,17 +1,17 @@
 # Frappe Control Plane para Kubernetes (v16): DEV CONTAINER
 
-
 ## 1. Configuración del Bench y Sitio
 
 ### Crear el Bench
 ```bash
-bench init bench-16 --frappe-branch version-16
-cd bench-16
+bench init bench-16 --frappe-branch version-16 --skip-redis-config-generation
 ```
 
 ### Configurar Hosts de Docker
 Necesario para que el bench encuentre los servicios dentro de la red del Dev Container:
 ```bash
+cd bench-16
+
 bench set-config -g db_host mariadb
 bench set-config -g redis_cache redis://redis-cache:6379
 bench set-config -g redis_queue redis://redis-queue:6379
@@ -32,8 +32,9 @@ bench new-app kubeport
 # Detalles:
 # App Name: kubeport
 # Description: A centralized Kubernetes Control Plane.
-# App Publisher: Los Favs
 # License: MIT
+# App Publisher: Los Favs
+# Ignorar Github CI/CD workflow por ahora.
 ```
 
 ### Instalar y Activar Modo Desarrollador
@@ -43,6 +44,19 @@ bench --site frappe-k8s.localhost set-config developer_mode 1
 ```
 
 ## 3. Infraestructura Kubernetes (K3d)
+
+### Instalación de K3d
+
+```bash
+# Curl
+curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+# Wget
+wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+# Referencia
+# https://github.com/k3d-io/k3d
+```
 
 ### Crear el Clúster
 Ejecutar en la terminal de la máquina host (o donde esté instalado K3d):
@@ -144,6 +158,11 @@ frappe.ui.form.on('Kubernetes Cluster', {
 
 Para que el contenedor de Frappe llegue al Host (K3d), se debe modificar la URL del `server` en el Kubeconfig pegado en Frappe:
 
+### LINUX
+
 1.  **Obtener IP del Gateway:** Ejecutar `python -c "import socket; print(socket.gethostbyname(socket.gethostname()))"` en la terminal del contenedor. Si da `172.22.0.4`, usar `172.22.0.1`.
-2.  **Editar Server en Frappe:** * `server: https://172.22.0.1:46469` (Linux)
-    * Hay que investigar.
+2.  **Editar Server en Frappe:** * `server: https://<DIRECCIÓN_IP>:46469`
+
+### WINDOWS (TODO)
+
+- Hay que investigar en Windows: Error 101 (puede ser por el firewall).
