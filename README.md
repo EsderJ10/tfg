@@ -72,13 +72,13 @@ bench new-site <NOMBRE_DEL_SITIO>.localhost --mariadb-root-password [PASSWORD] -
 
 - [ ] Despliegue de ERPNext a través de Helm Chart
 - [x] Crear DocType que permite conectar a un clúster de Kubernetes.
-   - [ ] Modificar el indexado. Utilzar nombre en cambio de id autogenerado.
+   - [x] Modificar el indexado. Utilzar nombre en cambio de id autogenerado.
 - [ ] Crear un manifiesto y cargarlo.
-- [ ] Poder ejecutar comandos desde la interfaz de Frappe (kubectl).
-- [ ] K3d:
+- [x] Poder ejecutar comandos desde la interfaz de Frappe (kubectl).
+- [x] K3d:
   - [x] Crear clúster de K3d
   - [x] Conectar a clúster de K3d
-  - [ ] Ejecutar comandos en el clúster de K3d
+  - [x] Ejecutar comandos en el clúster de K3d
 
 ## Resources
 
