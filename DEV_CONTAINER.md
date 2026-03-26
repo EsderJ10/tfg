@@ -200,14 +200,14 @@ sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 kubectl version --client # Para verificar la instalación
 ```
 
-## 7.2. DocType: Kubernetes Command
+### 7.2. DocType: Kubernetes Command
 
 Crear un nuevo DocType en el módulo Kubeport con las siguientes propiedades:
 
 - **Naming Rule:** By fieldname  
 - **Autoname:** command_name  
 
-### Campos (Layout):
+#### Campos (Layout):
 
 | Label           | Type   | Name            | Mandatory | Options / Notas                                      |
 |----------------|--------|-----------------|----------|------------------------------------------------------|
@@ -219,11 +219,11 @@ Crear un nuevo DocType en el módulo Kubeport con las siguientes propiedades:
 
 ---
 
-## 7.3. Lógica de Ejecución (Código)
+### 7.3. Código
 
 El script toma el Kubeconfig guardado en el clúster vinculado, lo inyecta en un archivo temporal y usa la librería `subprocess` para ejecutar `kubectl` en el sistema base de forma segura.
 
-### Backend (Python)
+#### Backend (Python)
 
 **Ubicación:**  
 `apps/kubeport/kubeport/kubeport/doctype/kubernetes_command/kubernetes_command.py`
@@ -284,7 +284,7 @@ class KubernetesCommand(Document):
                 os.remove(temp_path)
 ```
 
-### Frontend (JavaScript)
+#### Frontend (JavaScript)
 
 **Ubicación:**  
 `apps/kubeport/kubeport/kubeport/doctype/kubernetes_command/kubernetes_command.js`
@@ -308,6 +308,213 @@ frappe.ui.form.on('Kubernetes Command', {
                 }
             }
         });
+    }
+});
+```
+
+## 8. Kubernetes Manifest
+
+### 8.1. Creación del DocType
+
+La idea de este DocType es actuar como IaC ([Infrastructure as Code](https://en.wikipedia.org/wiki/Infrastructure_as_code)) para gestionar los recursos de Kubernetes de manera programática.
+
+- **Naming Rule:** By fieldname  
+- **Autoname:** manifest_name
+
+#### Campos
+
+| Label             | Type   | Name              | Mandatory | Options / Notas                          |
+| ----------------- | ------ | ----------------- | --------- | ---------------------------------------- |
+| Manifest Name     | Data   | `manifest_name`   | ✅         | Identificador único (indexado).          |
+| Target Cluster    | Link   | `cluster`         | ✅         | Options: Kubernetes Cluster              |
+| Namespace         | Data   | `namespace`       | ❌         | Default: `default`                       |
+| JSON Content      | Code   | `json_content`    | ✅         | Options: JSON. Editor con resaltado.     |
+| Apply Manifest    | Button | `apply_manifest`  | ❌         | Ejecuta la lógica de creación.           |
+| Delete Manifest   | Button | `delete_manifest` | ❌         | Ejecuta la lógica de destrucción.        |
+| Status            | Select | `status`          | ❌         | `Draft`, `Applied`, `Failed`. Read Only. |
+
+### 8.2. Código
+
+El backend procesa el JSON directamente en memoria.
+
+> [!NOTE]
+> Aunque el manifiesto es JSON, Kubeconfig se mantiene como YAML en los ficheros temporales. Esto se debe a que es el estándar de Kubernetes.
+
+#### Backend (Python)
+
+**Ubicación:**  
+`apps/kubeport/kubeport/kubeport/doctype/kubernetes_manifest/kubernetes_manifest.py`
+
+```python
+import frappe
+from frappe.model.document import Document
+from kubernetes import client, config, utils
+import tempfile
+import os
+import urllib3
+import json
+
+class KubernetesManifest(Document):
+    def setup_kubernetes_client(self):
+        """Prepara la conexión. Kubeconfig se mantiene en YAML por estándar."""
+        if not self.cluster:
+            frappe.throw("Target cluster is required.")
+            
+        cluster_doc = frappe.get_doc("Kubernetes Cluster", self.cluster)
+        
+        fd_kube, kube_path = tempfile.mkstemp(suffix=".yaml")
+        with os.fdopen(fd_kube, 'w') as f:
+            f.write(cluster_doc.kubeconfig)
+            
+        config.load_kube_config(config_file=kube_path)
+        
+        # Bypass SSL para entornos de desarrollo local (K3d/Docker)
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        conf = client.Configuration.get_default_copy()
+        conf.verify_ssl = False
+        client.Configuration.set_default(conf)
+        
+        return client.ApiClient(), kube_path
+
+    @frappe.whitelist()
+    def apply_manifest(self):
+        if not self.json_content:
+            frappe.throw("JSON content is empty.")
+
+        try:
+            # Validación de sintaxis antes de la ejecución
+            manifest_data = json.loads(self.json_content)
+        except json.JSONDecodeError as e:
+            frappe.throw(f"Invalid JSON format: {str(e)}")
+
+        k8s_client, kube_path = None, None
+        try:
+            k8s_client, kube_path = self.setup_kubernetes_client()
+            
+            # Normalización: permite procesar un objeto único o una lista de objetos
+            if isinstance(manifest_data, dict):
+                manifest_data = [manifest_data]
+
+            for k8s_object in manifest_data:
+                utils.create_from_dict(
+                    k8s_client,
+                    data=k8s_object,
+                    namespace=self.namespace or "default"
+                )
+
+            self.db_set('status', 'Applied')
+            frappe.msgprint(
+                f"Manifest '{self.manifest_name}' applied successfully.",
+                indicator="green",
+                alert=True
+            )
+        except Exception as e:
+            self.db_set('status', 'Failed')
+            frappe.throw(f"Application error: {str(e)}")
+        finally:
+            if kube_path and os.path.exists(kube_path):
+                os.remove(kube_path)
+
+    @frappe.whitelist()
+    def delete_manifest(self):
+        """Destrucción mediante proxy kubectl para mayor fiabilidad."""
+        import subprocess
+
+        if self.status != 'Applied':
+            frappe.throw("Only applied manifests can be deleted.")
+            
+        k8s_client, kube_path = None, None
+        fd_json, json_path = tempfile.mkstemp(suffix=".json")
+        
+        try:
+            with os.fdopen(fd_json, 'w') as f:
+                f.write(self.json_content)
+                
+            k8s_client, kube_path = self.setup_kubernetes_client()
+            
+            full_cmd = [
+                "kubectl", "delete",
+                "-f", json_path,
+                "--kubeconfig", kube_path,
+                "--insecure-skip-tls-verify=true"
+            ]
+
+            result = subprocess.run(full_cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                self.db_set('status', 'Draft')
+                frappe.msgprint(
+                    "Resources removed from cluster.",
+                    indicator="orange",
+                    alert=True
+                )
+            else:
+                frappe.throw(f"Deletion error: {result.stderr}")
+        finally:
+            if os.path.exists(json_path):
+                os.remove(json_path)
+            if kube_path and os.path.exists(kube_path):
+                os.remove(kube_path)
+```
+
+#### Frontend (JavaScript)
+
+**Ubicación:**  
+`apps/kubeport/kubeport/kubeport/doctype/kubernetes_manifest/kubernetes_manifest.js`
+
+```javascript
+frappe.ui.form.on('Kubernetes Manifest', {
+    refresh: function(frm) {
+        // Indicador visual de estado
+        const status_map = {
+            'Applied': 'green',
+            'Failed': 'red',
+            'Draft': 'orange'
+        };
+
+        if (frm.doc.status) {
+            frm.page.set_indicator(
+                frm.doc.status,
+                status_map[frm.doc.status] || 'grey'
+            );
+        }
+    },
+
+    apply_manifest: function(frm) {
+        if (frm.is_dirty()) {
+            frappe.throw(__('Save changes before applying the manifest.'));
+        }
+
+        frappe.call({
+            doc: frm.doc,
+            method: 'apply_manifest',
+            freeze: true,
+            freeze_message: __('Synchronizing with cluster...'),
+            callback: function(r) {
+                if (!r.exc) {
+                    frm.reload_doc();
+                }
+            }
+        });
+    },
+
+    delete_manifest: function(frm) {
+        frappe.confirm(
+            __('Are you sure you want to destroy these resources?'),
+            () => {
+                frappe.call({
+                    doc: frm.doc,
+                    method: 'delete_manifest',
+                    freeze: true,
+                    freeze_message: __('Cleaning up cluster...'),
+                    callback: function(r) {
+                        if (!r.exc) {
+                            frm.reload_doc();
+                        }
+                    }
+                });
+            }
+        );
     }
 });
 ```
