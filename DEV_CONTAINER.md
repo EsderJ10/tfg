@@ -195,7 +195,7 @@ Para interactuar dinámicamente con los clústeres desde Frappe, necesitamos ins
 Ejecutar dentro de la terminal del Dev Container (VS Code):
 
 ```bash
-curl -LO "[https://dl.k8s.io/release/$(curl](https://dl.k8s.io/release/$(curl) -L -s [https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl](https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl)"
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
 sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 kubectl version --client # Para verificar la instalación
 ```
@@ -518,3 +518,228 @@ frappe.ui.form.on('Kubernetes Manifest', {
     }
 });
 ```
+
+## 9. Helm Release
+
+### 9.1. Instalación de Helm en el Dev Container
+
+El entorno base requiere el binario de Helm para interactuar con los repositorios y el clúster. Ejecutar en la terminal del Dev Container:
+
+```bash
+# Instalación del binario
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+chmod 700 get_helm.sh
+./get_helm.sh
+
+# Registro de repositorios para pruebas (Frappe y Bitnami)
+helm repo add frappe https://helm.erpnext.com
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+```
+
+### 9.2. Creación del DocType
+
+He diseñado este DocType para ser un inyector genérico. El usuario define qué paquete quiere (`chart_reference`) y personaliza su comportamiento mediante un objeto JSON de valores.
+
+- **Naming Rule:** By fieldname  
+- **Autoname:** release_name
+
+#### Campos (Layout)
+
+| Label             | Type   | Name               | Mandatory | Options / Notas                               |
+| ----------------- | ------ | ------------------ | --------- | --------------------------------------------- |
+| Release Name      | Data   | `release_name`     | ✅         | Identificador único.                          |
+| Target Cluster    | Link   | `cluster`          | ✅         | Options: Kubernetes Cluster                   |
+| Namespace         | Data   | `namespace`        | ✅         | Default: `default`. Se creará si no existe.   |
+| Chart Reference   | Data   | `chart_reference`  | ✅         | Ej: `frappe/erpnext` o `bitnami/nginx`.       |
+| Section Break     |        |                    |           |                                               |
+| Values (JSON)     | Code   | `values_json`      | ✅         | Options: JSON. Default: `{}`.                 |
+| Section Break     |        |                    |           |                                               |
+| Deploy / Upgrade  | Button | `deploy_release`   | ❌         | Ejecuta la instalación/actualización.         |
+| Column Break      |        |                    |           | Para alinear botones horizontalmente.         |
+| Uninstall Release | Button | `uninstall_release`| ❌         | Elimina la release y sus recursos.            |
+| Status            | Select | `status`           | ❌         | `Draft`, `Deployed`, `Failed`. Read Only.     |
+
+### 9.3. Código
+
+La lógica principal utiliza el comando `upgrade --install`. Esta es una técnica de **idempotencia**: si la aplicación no existe, se instala; si ya existe, Helm detecta los cambios en el JSON y actualiza solo lo necesario.
+
+#### Backend (Python)
+
+**Ubicación:** `apps/kubeport/kubeport/kubeport/doctype/helm_release/helm_release.py`
+
+```python
+import frappe
+import frappe
+from frappe.model.document import Document
+import subprocess
+import tempfile
+import os
+import json
+
+class HelmRelease(Document):
+    def get_cluster_kubeconfig(self):
+        """Recupera el Kubeconfig del clúster vinculado."""
+        if not self.cluster:
+            frappe.throw("El clúster destino es obligatorio.")
+            
+        cluster_doc = frappe.get_doc("Kubernetes Cluster", self.cluster)
+        if not cluster_doc.kubeconfig:
+            frappe.throw("El clúster carece de Kubeconfig.")
+            
+        return cluster_doc.kubeconfig
+
+    @frappe.whitelist()
+    def deploy_release(self):
+        if not self.values:
+            frappe.throw("El campo Values (JSON) está vacío.")
+
+        # Validación estricta del JSON
+        try:
+            json.loads(self.values)
+        except json.JSONDecodeError as e:
+            frappe.throw(f"Error de sintaxis JSON: {str(e)}")
+
+        kubeconfig_data = self.get_cluster_kubeconfig()
+        fd_kube, kube_path = tempfile.mkstemp(suffix=".yaml")
+        fd_values, values_path = tempfile.mkstemp(suffix=".json")
+        
+        try:
+            with os.fdopen(fd_kube, 'w') as f:
+                f.write(kubeconfig_data)
+                
+            with os.fdopen(fd_values, 'w') as f:
+                f.write(self.values)
+
+            # Construcción dinámica del comando Helm
+            cmd = [
+                "helm", "upgrade", "--install",
+                self.release_name,
+                self.chart_reference,
+                "--namespace", self.namespace,
+                "--create-namespace",
+                "-f", values_path,
+                "--kubeconfig", kube_path,
+                "--kube-insecure-skip-tls-verify"
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode == 0:
+                self.db_set('status', 'Deployed')
+                frappe.msgprint(f"Release '{self.release_name}' desplegada correctamente.", indicator="green", alert=True)
+            else:
+                self.db_set('status', 'Failed')
+                frappe.throw(f"Fallo en Helm: {result.stderr}")
+
+        except Exception as e:
+            self.db_set('status', 'Failed')
+            frappe.throw(f"Error interno: {str(e)}")
+            
+        finally:
+            if os.path.exists(kube_path): os.remove(kube_path)
+            if os.path.exists(values_path): os.remove(values_path)
+
+    @frappe.whitelist()
+    def uninstall_release(self):
+        if self.status != 'Deployed':
+            frappe.throw("Solo se pueden desinstalar Releases 'Deployed'.")
+
+        kubeconfig_data = self.get_cluster_kubeconfig()
+        fd_kube, kube_path = tempfile.mkstemp(suffix=".yaml")
+        
+        try:
+            with os.fdopen(fd_kube, 'w') as f:
+                f.write(kubeconfig_data)
+
+            cmd = [
+                "helm", "uninstall",
+                self.release_name,
+                "--namespace", self.namespace,
+                "--kubeconfig", kube_path,
+                "--kube-insecure-skip-tls-verify"
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode == 0:
+                self.db_set('status', 'Draft')
+                frappe.msgprint(f"Release desinstalada del clúster.", indicator="orange", alert=True)
+            else:
+                frappe.throw(f"Fallo al desinstalar: {result.stderr}")
+
+        finally:
+            if os.path.exists(kube_path): os.remove(kube_path)
+```
+
+#### Frontend (JavaScript)
+
+**Ubicación**: `apps/kubeport/kubeport/kubeport/doctype/helm_release/helm_release.js`
+
+```javascript
+frappe.ui.form.on('Helm Release', {
+    refresh: function(frm) {
+        const status_map = { 'Deployed': 'green', 'Failed': 'red', 'Draft': 'orange' };
+        if (frm.doc.status) {
+            frm.page.set_indicator(frm.doc.status, status_map[frm.doc.status] || 'grey');
+        }
+    },
+
+    deploy_release: function(frm) {
+        if (frm.is_dirty()) {
+            frappe.throw(__('Guarda el documento antes de desplegar.'));
+        }
+
+        frappe.call({
+            doc: frm.doc,
+            method: 'deploy_release',
+            freeze: true,
+            freeze_message: __('Ejecutando Helm... esto puede tardar unos minutos en clústeres remotos.'),
+            callback: function(r) {
+                if (!r.exc) frm.reload_doc();
+            }
+        });
+    },
+
+    uninstall_release: function(frm) {
+        frappe.confirm(__('¿Destruir esta Release y todos sus datos asociados?'),
+            () => {
+                frappe.call({
+                    doc: frm.doc,
+                    method: 'uninstall_release',
+                    freeze: true,
+                    freeze_message: __('Desinstalando paquete...'),
+                    callback: function(r) {
+                        if (!r.exc) frm.reload_doc();
+                    }
+                });
+            }
+        );
+    }
+});
+```
+
+### 9.4. Notas de Implementación (PoC ERPNext)
+
+Al utilizar el clúster de **K3d**, el Chart oficial de ERPNext requiere que definamos la clase de almacenamiento (`storageClass`) explícitamente, ya que por defecto busca proveedores de nube (AWS/GCP). 
+
+El campo **Values (JSON)** debe incluir la referencia a `local-path`:
+
+```json
+{
+  "persistence": {
+    "worker": { "storageClass": "local-path", "size": "1Gi" },
+    "logs": { "storageClass": "local-path", "size": "1Gi" }
+  },
+  "mariadb": {
+    "persistence": { "storageClass": "local-path" }
+  },
+  "redis": {
+    "master": { "persistence": { "storageClass": "local-path" } }
+  }
+}
+```
+
+> [!TIP]
+> Una vez que el estado cambie a Deployed, puedes verificar la descarga de imágenes y el inicio de los servicios usando el DocType de comandos con:
+> `get pods -n <namespace>`
