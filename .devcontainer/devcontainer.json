@@ -1,0 +1,115 @@
+{
+  "name": "Frappe K8 Dev",
+  "dockerComposeFile": "./docker-compose.yml",
+  "service": "frappe",
+
+  // Carpeta que abre VS Code dentro del contenedor.
+  // Mapea a: c:\Users\victo\Desktop\frappe-k8\ en el host.
+  "workspaceFolder": "/workspace",
+  "remoteUser": "frappe",
+
+  // ── DevContainer Features ──────────────────────────────────────────────────
+  // Se instalan automáticamente sobre la imagen al crear el contenedor.
+  "features": {
+    // Docker CLI + gestión del socket del host (Docker-outside-of-Docker).
+    // Resuelve permisos de grupo para /var/run/docker.sock.
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false,
+      "installDockerBuildx": false
+    },
+    // kubectl y Helm (no instala minikube — usamos k3d).
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {
+      "kubectl": "latest",
+      "helm": "latest",
+      "minikube": "none"
+    }
+  },
+
+  // Puertos redirigidos al host (bench, socketio, Jupyter)
+  "forwardPorts": [8000, 8001, 9000, 9001, 6787],
+
+  // Se ejecuta UNA SOLA VEZ al crear/reconstruir el contenedor.
+  // Inicializa el bench si no existe; si ya existe, no hace nada.
+  // También instala k3d y crea el cluster Kubernetes.
+  "postCreateCommand": "bash /workspace/.devcontainer/scripts/post-create.sh",
+
+  // Se ejecuta CADA VEZ que el contenedor arranca (start/restart).
+  // Levanta bench start en background y arranca el cluster si estaba parado.
+  "postStartCommand": "bash /workspace/.devcontainer/scripts/post-start.sh",
+
+  // Al cerrar VS Code, detiene todo el stack de Compose.
+  "shutdownAction": "stopCompose",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-vscode.live-server",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-mysql",
+        "visualstudioexptteam.vscodeintellicode",
+        "ms-python.debugpy"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        // Conexión preconfigurada a MariaDB desde SQLTools
+        "sqltools.connections": [
+          {
+            "mysqlOptions": {
+              "authProtocol": "default",
+              "enableSsl": "Disabled"
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "mariadb",
+            "port": 3306,
+            "driver": "MariaDB",
+            "name": "MariaDB",
+            "username": "root",
+            "password": "123",
+            "database": "mysql"
+          }
+        ],
+        // Apunta el intérprete de Python al virtualenv del bench
+        "python.defaultInterpreterPath": "/workspace/frappe-bench/env/bin/python"
+      }
+    }
+  }
+}
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-vscode.live-server",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-mysql",
+        "visualstudioexptteam.vscodeintellicode",
+        "ms-python.debugpy"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        // Conexión preconfigurada a MariaDB desde SQLTools
+        "sqltools.connections": [
+          {
+            "mysqlOptions": {
+              "authProtocol": "default",
+              "enableSsl": "Disabled"
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "mariadb",
+            "port": 3306,
+            "driver": "MariaDB",
+            "name": "MariaDB",
+            "username": "root",
+            "password": "123",
+            "database": "mysql"
+          }
+        ],
+        // Apunta el intérprete de Python al virtualenv del bench
+        "python.defaultInterpreterPath": "/workspace/frappe-bench/env/bin/python"
+      }
+    }
+  }
+}

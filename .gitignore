@@ -1,30 +1,8 @@
-# Environment Variables
-.env
+# Frappe bench (generado automáticamente, no trackear en git)
+frappe-bench/
 
-# mounted volume
-sites
+# Logs del devcontainer
+*.log
 
-development/*
-!development/README.md
-!development/installer.py
-!development/apps-example.json
-!development/vscode-example/
-
-# Pycharm
-.idea
-
-# VS Code
-.vscode/**
-!.vscode/extensions.json
-
-# VS Code devcontainer
-.devcontainer
-*.code-workspace
-
-# Python
-*.pyc
-__pycache__
-venv
-
-# NodeJS
-node_modules
+# Kubeconfig generado (contiene credenciales del cluster local)
+.devcontainer/.kube/

@@ -1,0 +1,53 @@
+services:
+  # ── Base de datos ─────────────────────────────────────────────────────────────
+  mariadb:
+    image: docker.io/mariadb:11.8
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: 123
+      MARIADB_AUTO_UPGRADE: 1
+    volumes:
+      # Volumen nombrado → persiste tras "Rebuild Container"
+      - frappe-k8-mariadb-data:/var/lib/mysql
+
+  # ── Redis (caché y cola de trabajos) ─────────────────────────────────────────
+  redis-cache:
+    image: docker.io/redis:alpine
+
+  redis-queue:
+    image: docker.io/redis:alpine
+
+  # ── Contenedor de desarrollo Frappe ──────────────────────────────────────────
+  frappe:
+    image: docker.io/frappe/bench:latest
+    # Mantiene el contenedor vivo; bench start se lanza desde post-start.sh
+    command: sleep infinity
+    environment:
+      - SHELL=/bin/bash
+      # k3d / kubectl usarán este kubeconfig (path dentro del bind-mount →
+      # persiste tras "Rebuild Container")
+      - KUBECONFIG=/workspace/.devcontainer/.kube/config
+    volumes:
+      # Bind mount de la carpeta del proyecto al contenedor.
+      # EL BENCH SE CREA AQUÍ DENTRO → persiste en el host tras Rebuild.
+      - ..:/workspace:cached
+      # Docker-outside-of-Docker: accede al daemon del HOST para k3d.
+      # k3d crea sus nodos como contenedores Docker en el host, no dentro
+      # de este contenedor (por eso no se necesita Docker-in-Docker).
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspace
+    ports:
+      - 8000-8005:8000-8005   # Frappe web + workers
+      - 9000-9005:9000-9005   # Socketio
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+
+# ── Volúmenes nombrados (persisten entre rebuilds) ───────────────────────────
+volumes:
+  frappe-k8-mariadb-data:
