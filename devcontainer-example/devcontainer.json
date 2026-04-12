@@ -45,8 +45,7 @@
   "workspaceFolder": "/workspace/development",
   "shutdownAction": "stopCompose",
   "features": {
-    "ghcr.io/devcontainers/features/kubectl:1": {},
-    "ghcr.io/devcontainers/features/helm:1": {}
+    "ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
   },
   "mounts": [
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/frappe/.ssh,type=bind,consistency=cached"

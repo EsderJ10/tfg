@@ -1,5 +1,40 @@
 # Frappe Control Plane para Kubernetes (v16): DEV CONTAINER
 
+## 0. Ruta soportada de instalacion
+
+La ruta soportada para este proyecto es devcontainer-first:
+
+- Host: `docker`, `docker compose`, `k3d`, `code`
+- Dev container: `bench`, `python`, `kubectl`, `helm`
+
+No instales `kubectl` ni `helm` manualmente en el host para el flujo normal de desarrollo. El archivo activo `.devcontainer/devcontainer.json` los provee dentro del contenedor mediante el feature oficial `ghcr.io/devcontainers/features/kubectl-helm-minikube:1`.
+
+En condiciones normales, este feature publico no requiere credenciales manuales de GHCR. Si falla la resolucion, valida primero que la referencia del feature exista y que tu Docker pueda acceder a GHCR.
+
+### Verificacion del host
+
+Ejecuta en la maquina host:
+
+```bash
+docker --version
+docker compose version
+k3d version
+code --version
+```
+
+Si Docker requiere `sudo`, corrige permisos antes de seguir. El flujo normal de trabajo no debe depender de shells root.
+
+### Verificacion dentro del dev container
+
+Una vez reabierto el proyecto en el contenedor, verifica:
+
+```bash
+kubectl version --client
+helm version
+python --version
+bench --version
+```
+
 ## 1. Configuración del Bench y Sitio
 
 ### Crear el Bench
@@ -47,15 +82,12 @@ bench --site frappe-k8s.localhost set-config developer_mode 1
 
 ### Instalación de K3d
 
-```bash
-# Curl
-curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+Instala `k3d` en la maquina host siguiendo su documentacion oficial o el gestor de paquetes de tu sistema. Evita usar `curl | bash` como ruta principal de instalacion.
 
-# Wget
-wget -q -O - https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+Referencia:
 
-# Referencia
-# https://github.com/k3d-io/k3d
+```text
+https://k3d.io/
 ```
 
 ### Crear el Clúster
@@ -188,16 +220,20 @@ En Windows, las restricciones del Firewall y el aislamiento de red de WSL2 a men
 
 ## 7. Ejecución de comandos (kubectl) desde la interfaz de Frappe
 
-Para interactuar dinámicamente con los clústeres desde Frappe, necesitamos instalar `kubectl` en el contenedor y crear un DocType que actúe como terminal interactiva.
+Para interactuar dinamicamente con los clusters desde Frappe, `kubectl` debe existir dentro del dev container. En este proyecto no se instala manualmente: lo provee `.devcontainer/devcontainer.json`.
 
-### 7.1. Instalación de `kubectl` en el Dev Container
+### 7.1. Verificación de `kubectl` en el Dev Container
 
 Ejecutar dentro de la terminal del Dev Container (VS Code):
 
 ```bash
-curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-kubectl version --client # Para verificar la instalación
+kubectl version --client
+```
+
+Si este comando falla, reconstruye el dev container antes de intentar cualquier instalacion manual:
+
+```text
+Dev Containers: Rebuild and Reopen in Container
 ```
 
 ### 7.2. DocType: Kubernetes Command
@@ -521,21 +557,20 @@ frappe.ui.form.on('Kubernetes Manifest', {
 
 ## 9. Helm Release
 
-### 9.1. Instalación de Helm en el Dev Container
+### 9.1. Verificación de Helm en el Dev Container
 
-El entorno base requiere el binario de Helm para interactuar con los repositorios y el clúster. Ejecutar en la terminal del Dev Container:
+El entorno base requiere Helm para interactuar con los repositorios y el cluster, pero el binario ya lo instala el dev container. Ejecuta:
 
 ```bash
-# Instalación del binario
-curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
-chmod 700 get_helm.sh
-./get_helm.sh
+helm version
 
-# Registro de repositorios para pruebas (Frappe y Bitnami)
+# Registro de repositorios para pruebas
 helm repo add frappe https://helm.erpnext.com
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm repo update
 ```
+
+Si `helm version` falla, reconstruye el dev container. No uses scripts remotos como flujo primario de instalacion.
 
 ### 9.2. Creación del DocType
 
