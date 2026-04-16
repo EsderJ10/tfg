@@ -5,8 +5,7 @@
     - **Implementación actual:** En el vídeo que mandamos, se demostró usando "live queries".
     - **Validación del Enfoque (Virtual DocTypes vs Client-side queries):**
       - Lo hice así con la base conceptual de NO guardar en la base de datos para evitar problemas de sincronización (split-brain) entre Frappe y el clúster de K8s. 
-      - Sin embargo, migrar la lógica de "live queries" del cliente hacia un **Virtual DocType** ejecutado asíncronamente en el servidor parece ser la mejor decisión a largo plazo.
-      - *¿Por qué Virtual DocTypes es mejor?* Al definirlo en el backend, el sistema gana compatibilidad total e inmediata con los componentes de la interfaz nativa estándar de Frappe (vistas de lista, barra de búsqueda global, filtros nativos y manejo robusto de permisos y roles de usuario), reduciendo la necesidad de desarrollar vistas de cliente exclusivas y aisladas. El retraso por consulta a K8s se puede gestionar mediante llamadas en background en JS donde se necesite.
+      - De esta manera, separamos explícitamente el estado deseado -el de MariaDB- con el estado real -el de K8s-. 
 
 - TAREA 2: Creación de sitios y benches desde la UI:
     - José Luis nos ha comentado que esto se hace mediante *Jobs de Helm Chart de ERPNext*.
