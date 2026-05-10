@@ -1,5 +1,17 @@
 # CONTROL PLANE FRAPPE K8S
 
+## Componentes del proyecto
+
+Este repositorio es el paraguas del TFG. El entregable completo se compone de tres repositorios:
+
+| Componente | Repositorio | Rol |
+|---|---|---|
+| Backend / app | [`EsderJ10/kubeport`](https://github.com/EsderJ10/kubeport) | Aplicación Frappe que actúa como plano de control de Kubernetes. |
+| Landing page | [`1DAW-victorjim551/lp-KubePort`](https://github.com/1DAW-victorjim551/lp-KubePort) | Página pública del proyecto, desplegada en [`1daw-victorjim551.github.io/lp-KubePort`](https://1daw-victorjim551.github.io/lp-KubePort/). Autoría de Víctor Jiménez. |
+| Umbrella (este repo) | `EsderJ10/tfg` | Dev-container, documentación de diseño, task tracker. |
+
+Para el marco académico (problema, estado del arte, objetivos, resultados) ver [`docs/thesis.md`](https://github.com/EsderJ10/kubeport/blob/main/docs/thesis.md) en el repositorio de Kubeport.
+
 ## DEVELOPMENT SETUP
 
 > Es recomendable tener la extensión Dev Container instalada. De esta manera, VSCode detecta automáticamente los contenedores de desarrollo.
