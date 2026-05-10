@@ -1,0 +1,121 @@
+# Kubeport eval stack — `docker compose up` brings up:
+#   - mariadb        (Frappe desired-state store)
+#   - redis-cache    (Frappe cache)
+#   - redis-queue    (Frappe RQ + socketio)
+#   - k3s            (single-node Kubernetes cluster Kubeport manages)
+#   - kubeport       (Frappe v16 bench with kubeport pre-installed)
+#
+# Grader workflow:
+#   cp .env.example .env             # optional — defaults are fine for local eval
+#   docker compose up -d
+#   # wait ~2 min for the first-run site init (subsequent boots are instant)
+#   open http://localhost:8000       # log in as Administrator / admin
+#   # navigate to the Kubeport Operations workspace
+#
+# See README.md for the full guided walkthrough.
+
+name: kubeport-eval
+
+services:
+  mariadb:
+    image: docker.io/mariadb:11.8
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-changeme}
+      MARIADB_AUTO_UPGRADE: 1
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  redis-cache:
+    image: docker.io/redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-cache-data:/data
+
+  redis-queue:
+    image: docker.io/redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+
+  # Single-node Kubernetes for Kubeport to drive.  Kubeport reaches the API
+  # server at https://k3s:6443 over the compose network.  The kubeconfig is
+  # written to /shared/k3s/kubeconfig.yaml and consumed by the kubeport
+  # service's entrypoint to seed a Kubernetes Cluster row.
+  k3s:
+    image: docker.io/rancher/k3s:v1.30.4-k3s1
+    restart: unless-stopped
+    privileged: true
+    command:
+      - server
+      - --tls-san=k3s
+      - --write-kubeconfig=/shared/k3s/kubeconfig.yaml
+      - --write-kubeconfig-mode=0644
+      - --disable=traefik
+      - --disable-network-policy
+    environment:
+      K3S_KUBECONFIG_MODE: "0644"
+    volumes:
+      - k3s-server:/var/lib/rancher/k3s
+      - shared-k3s:/shared/k3s
+    ports:
+      # Expose the K8s API on the host so the grader can also `kubectl` directly.
+      - "${K3S_HOST_PORT:-6443}:6443"
+    healthcheck:
+      test: ["CMD-SHELL", "test -s /shared/k3s/kubeconfig.yaml && kubectl --kubeconfig=/shared/k3s/kubeconfig.yaml get --raw=/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  kubeport:
+    build:
+      context: .
+      dockerfile: images/kubeport/Dockerfile
+      args:
+        KUBEPORT_REPO: ${KUBEPORT_REPO:-https://github.com/EsderJ10/kubeport}
+        KUBEPORT_REF: ${KUBEPORT_REF:-main}
+    image: kubeport-eval:${KUBEPORT_REF:-main}
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+      k3s:
+        condition: service_healthy
+    environment:
+      SITE_NAME: ${SITE_NAME:-kubeport.localhost}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      MARIADB_HOST: mariadb
+      MARIADB_PORT: "3306"
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-changeme}
+      REDIS_CACHE: redis://redis-cache:6379
+      REDIS_QUEUE: redis://redis-queue:6379
+      K3S_KUBECONFIG: /shared/k3s/kubeconfig.yaml
+      K3S_CLUSTER_NAME: ${K3S_CLUSTER_NAME:-eval-k3s}
+    volumes:
+      - bench-sites:/home/frappe/kubeport-bench/sites
+      - shared-k3s:/shared/k3s:ro
+    ports:
+      - "${BENCH_HOST_PORT:-8000}:8000"
+      - "${BENCH_SOCKETIO_PORT:-9000}:9000"
+
+volumes:
+  mariadb-data:
+  redis-cache-data:
+  redis-queue-data:
+  k3s-server:
+  shared-k3s:
+  bench-sites:
