@@ -8,9 +8,31 @@ Este repositorio es el paraguas del TFG. El entregable completo se compone de tr
 |---|---|---|
 | Backend / app | [`EsderJ10/kubeport`](https://github.com/EsderJ10/kubeport) | Aplicación Frappe que actúa como plano de control de Kubernetes. |
 | Landing page | [`1DAW-victorjim551/lp-KubePort`](https://github.com/1DAW-victorjim551/lp-KubePort) | Página pública del proyecto, desplegada en [`1daw-victorjim551.github.io/lp-KubePort`](https://1daw-victorjim551.github.io/lp-KubePort/). Autoría de Víctor Jiménez. |
-| Umbrella (este repo) | `EsderJ10/tfg` | Dev-container, documentación de diseño, task tracker. |
+| Umbrella (este repo) | `EsderJ10/tfg` | Dev-container, *stack* de despliegue Docker para evaluación, documentación de diseño, task tracker. |
 
 Para el marco académico (problema, estado del arte, objetivos, resultados) ver [`docs/thesis.md`](https://github.com/EsderJ10/kubeport/blob/main/docs/thesis.md) en el repositorio de Kubeport.
+
+## Despliegue para evaluación (Docker Compose)
+
+Si el objetivo es **probar la aplicación**, no editarla, ir directamente a [`deploy/`](deploy/).
+Ese directorio contiene un *stack* Docker Compose autocontenido que levanta:
+
+- MariaDB + Redis (caché y cola).
+- Un bench Frappe v16 con Kubeport y Helm 3 ya instalados.
+- Un clúster Kubernetes embebido (k3s, un solo nodo) que Kubeport gestiona desde el primer arranque.
+
+Tres comandos:
+
+```bash
+cd deploy
+docker compose build kubeport       # ~5–10 min la primera vez
+docker compose up -d                # ~2 min de first-run init
+open http://localhost:8000          # Administrator / admin
+```
+
+Ver [`deploy/README.md`](deploy/README.md) para el recorrido de evaluación
+guiado (registrar un repo Helm, desplegar una release, crear un sitio Frappe,
+programar *backups*).
 
 ## DEVELOPMENT SETUP
 
