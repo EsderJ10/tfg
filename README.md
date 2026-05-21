@@ -36,90 +36,131 @@ programar *backups*).
 
 ## DEVELOPMENT SETUP
 
-> Es recomendable tener la extensión Dev Container instalada. De esta manera, VSCode detecta automáticamente los contenedores de desarrollo.
+This project supports a devcontainer-first workflow.
 
-### Requisitos previos
+- Keep the host minimal: `docker`, `docker compose`, `k3d`, `code`
+- Run Kubernetes and Helm tooling inside the dev container: `kubectl`, `helm`
+- Avoid manual binary installs on the host unless you have a separate admin need
 
-- [Docker](https://docs.docker.com/get-docker/) instalado y en funcionamiento.
-- [Visual Studio Code](https://code.visualstudio.com/) con la extensión [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) instalada.
+### Host prerequisites
 
-### Pasos para configurar el entorno
+- [Docker](https://docs.docker.com/get-docker/) installed and running
+- Docker Compose v2 available through `docker compose`
+- [Visual Studio Code](https://code.visualstudio.com/)
+- [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
+- [k3d](https://k3d.io/) installed on the host
 
-1. Copiar `devcontainer-example` a `.devcontainer`:
+Recommended validation:
+
+```bash
+docker --version
+docker compose version
+k3d version
+code --version
+```
+
+If Docker requires `sudo`, fix that before continuing. The normal developer flow should not rely on root shells.
+
+### Where commands should run
+
+| Command family | Run on host | Run in dev container |
+| --- | --- | --- |
+| `docker`, `docker compose`, `k3d`, `code` | Yes | No |
+| `bench`, `python`, `kubectl`, `helm` | No | Yes |
+
+### Setup steps
+
+1. Copy `devcontainer-example` to `.devcontainer` only if `.devcontainer/` does not already exist:
 
    ```bash
    cp -R devcontainer-example .devcontainer
    ```
 
-2. Copiar la configuración de VSCode para el contenedor de desarrollo:
+2. Copy the VS Code development settings if `development/.vscode` does not already exist:
 
    ```bash
    cp -R development/vscode-example development/.vscode
    ```
 
-3. Reabrir el proyecto en el contenedor de desarrollo.
-   - Si tienes la extensión, aparecerá una notificación automáticamente.
-   - Si no tienes la extensión, pulsa `CTRL + SHIFT + P` > `Dev Containers: Reopen in Container`.
+3. Open this repository in VS Code.
 
-> [!NOTE]
-> La primera vez que se ejecute, tardará unos minutos en descargar las imágenes y configurar el entorno.
+4. Reopen the workspace in the dev container.
+   - `Ctrl + Shift + P`
+   - `Dev Containers: Reopen in Container`
 
-### Inicializar Bench y crear un sitio
+5. Let the dev container finish provisioning. The active `.devcontainer/devcontainer.json` installs Kubernetes and Helm tooling through the official combined feature:
+   - `ghcr.io/devcontainers/features/kubectl-helm-minikube:1`
+   - usable binaries include `kubectl` and `helm`
 
-Una vez dentro del contenedor, ejecuta el instalador automático:
+6. Inside the dev container, run the bootstrap script:
 
-```bash
-python installer.py
-```
+   ```bash
+   cd /workspace/development
+   python installer.py
+   ```
 
-Esto creará un bench con Frappe e instalará las apps definidas en `apps-example.json`.
+7. Start the bench inside the dev container:
 
-Para más opciones:
+   ```bash
+   cd /workspace/development/frappe-bench
+   bench start
+   ```
 
-```bash
-python installer.py --help
-```
+### Manual bench commands
 
-O puedes hacerlo manualmente siguiendo la [guía de desarrollo](docs/05-development/01-development.md).
-
-Algunos de los comandos que puedes usar son:
-
-```bash
-bench init --python 3.13 --node 20 --apps-path apps-example.json --frappe-path https://github.com/frappe/frappe --frappe-branch version-16 <NOMBRE_DEL_BENCH>
-```
-
-Para crear un sitio:
+If you want to create the bench manually instead of using `installer.py`, run these commands inside the dev container:
 
 ```bash
-bench new-site <NOMBRE_DEL_SITIO>.localhost --mariadb-root-password [PASSWORD] --admin-password admin
+bench init --python 3.13 --node 20 --apps-path apps-example.json --frappe-path https://github.com/frappe/frappe --frappe-branch version-16 <BENCH_NAME>
+bench new-site <SITE_NAME>.localhost --mariadb-root-password 123 --admin-password admin
 ```
 
-### Acceder a la aplicación
+### Verification inside the dev container
 
-- URL: [<NOMBRE_DEL_SITIO>.localhost:8000](http://<NOMBRE_DEL_SITIO>.localhost:8000)
-- Usuario: `Administrator`
-- Contraseña: `CONTRASEÑA_DEL_ADMINISTRADOR`
+After the container opens, verify the required binaries:
+
+```bash
+kubectl version --client
+helm version
+python --version
+bench --version
+```
+
+### Access the app
+
+- URL: [http://<SITE_NAME>.localhost:8000](http://<SITE_NAME>.localhost:8000)
+- User: `Administrator`
+- Password: the admin password used when creating the site
+
+### Notes on security
+
+- The supported setup keeps `kubectl` and `helm` inside the dev container.
+- Public Dev Container features from `ghcr.io/devcontainers/features/...` do not require manual credentials in the normal case.
+- The SSH home directory is mounted read-only into the container.
+- Prefer least-privilege kubeconfigs for development clusters.
+- Treat old manual `curl` install snippets as troubleshooting-only, not the primary setup path.
 
 ## TODO
 
 ### HIGH
 
-- [ ] Despliegue de ERPNext a través de Helm Chart
-- [ ] Crear DocType que permite conectar a un clúster de Kubernetes.
-- [ ] Crear un manifiesto y cargarlo.
-- [ ] Poder ejecutar comandos desde la interfaz de Frappe (kubectl).
-- [ ] K3d:
-  - [ ] Crear clúster de K3d
-  - [ ] Conectar a clúster de K3d
-  - [ ] Ejecutar comandos en el clúster de K3d
+- [ ] Despliegue de ERPNext a traves de Helm Chart
+- [x] Crear DocType que permite conectar a un cluster de Kubernetes
+- [x] Crear un manifiesto y cargarlo
+- [x] Poder ejecutar comandos desde la interfaz de Frappe (`kubectl`)
+- [x] K3d
+  - [x] Crear cluster de K3d
+  - [x] Conectar a cluster de K3d
+  - [x] Ejecutar comandos en el cluster de K3d
 
 ## Resources
 
 - [Frappe framework](https://github.com/frappe/frappe)
 - [ERPNext](https://github.com/frappe/erpnext)
 - [Frappe Bench](https://github.com/frappe/bench)
-- [Guía de desarrollo con Dev Containers](docs/05-development/01-development.md)
+- [Dev Container guide](docs/05-development/01-development.md)
+- [DEV_CONTAINER.md](DEV_CONTAINER.md)
 
 ## License
 
-Este proyecto está licenciado bajo la Licencia MIT al igual que el resto de los proyectos de Frappe. Ver [LICENSE](LICENSE) para más detalles.
+Este proyecto esta licenciado bajo MIT. Ver [LICENSE](LICENSE).
